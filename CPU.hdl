@@ -39,5 +39,48 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // Put your code here: 
+    // Determines whether the instruction is an A instruction
+    Not(in=instruction[15], out=AIns);          // A instruction
+    Not(in=AIns, out=CIns);                     // Opposite of A instruction is C instruction
+    
+    // Determines whether the instruction is an C instruction
+    And(a=CIns, b=instruction[5], out=ALUtoA);  // C instruction
+    
+    // Selects which value, the A-instruction value or the ALU output, should go to the A register
+    Mux16(a=instruction, b=ALUout, sel=ALUtoA, out=Aregin); // Stores the value in A-register
+
+    // If A instruction or ALU output to A-register, Load A
+    Or(a=AIns, b=ALUtoA, out=loadA);
+    ARegister(in=Aregin, load=loadA, out=Aout); // Generates the value inside A-register
+
+    // Selects A or M depending on the 12-bit instruction value
+    Mux16(a=Aout, b=inM, sel=instruction[12], out=AMout);
+
+    // Decides whether the ALU output is loaded to the D-register
+    And(a=CIns, b=instruction[4], out=loadD);
+    DRegister(in=ALUout, load=loadD, out=Dout); // Loads the value of the D-register from the ALU
+
+    // Calculates computations
+    ALU(x=Dout, y=AMout, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=ALUout, zr=ZRout, ng=NGout);
+
+    // Sets the ALU outputs
+    // Decides whether the CPU can write on the data memory
+    Or16(a=false, b=Aout, out[0..14]=addressM); // The address of write operations
+    Or16(a=false, b=ALUout, out=outM);          // The content in the data memory
+    And(a=CIns, b=instruction[3], out=writeM);  // Write to Data memory? 
+
+    // Check conditions for the next instruction
+    And(a=ZRout, b=instruction[1], out=jeq);    // Zero? Jump if zero
+    And(a=NGout, b=instruction[2], out=jlt);    // Negative? Jump if negative
+    Or(a=ZRout, b=NGout, out=zeroOrNeg);        // Zero or negative?
+    Not(in=zeroOrNeg, out=positive);            // Positive (if it is not zero and not neg)
+    And(a=positive, b=instruction[0], out=jgt); // Positive? Jump if positive
+
+    Or(a=jeq, b=jlt, out=jle);
+    Or(a=jle, b=jgt, out=jumpToA);
+
+    And(a=CIns, b=jumpToA, out=PCload);         // Load PC if C-instruction and conditions met
+    Not(in=PCload, out=PCinc);                  // Increment only if the PC is not loaded
+    PC(in=Aout, inc=PCinc, load=PCload, reset=reset, out[0..14]=pc);
 }
